@@ -1,20 +1,55 @@
-<p align="center">
-  <img width="200" src="/phg_logo.png" alt="Photogrammetry course logo">
-</p>
-
 В этом репозитории предложены задания курса по Фотограмметрии для студентов МКН/ИТМО/ВШЭ.
 
-Задания:
+[Остальные задания](https://github.com/PhotogrammetryCourse/PhotogrammetryTasks2023/).
 
-- **14.02** [Задание 1:](https://github.com/PhotogrammetryCourse/PhotogrammetryTasks2023/tree/task01) Локальные ключевые точки SIFT (детектор и дескриптор).
-- **21.02** [Задание 2:](https://github.com/PhotogrammetryCourse/PhotogrammetryTasks2023/tree/task02) Сопоставление ключевых точек и подсчет гомографии.
-- **28.02** [Задание 3:](https://github.com/PhotogrammetryCourse/PhotogrammetryTasks2023/tree/task03) SFM. Оценка взаимной ориентации и положения камер, построение облака точек.
-- **21.03** [Задание 4:](https://github.com/PhotogrammetryCourse/PhotogrammetryTasks2023/tree/task04) SFM. Ceres Solver и Bundle Adjustment.
-- **28.03** [Задание 5:](https://github.com/PhotogrammetryCourse/PhotogrammetryTasks2023/tree/task05) Depth Maps. Patch Match.
-- **18.04** Задание 6: Build model. Triangulation Delaunay + Graph Min-Cut.
+# Задание 4. SFM. Ceres Solver и Bundle Adjustment.
 
-Другое:
+[![Build Status](https://github.com/PhotogrammetryCourse/PhotogrammetryTasks2023/actions/workflows/cmake.yml/badge.svg?branch=task04&event=push)](https://github.com/PhotogrammetryCourse/PhotogrammetryTasks2023/actions/workflows/cmake.yml)
 
-- [Аннотация курса](https://github.com/PhotogrammetryCourse/PhotogrammetryTasks2023/blob/master/slides/phg_00_course_annotation.pdf)
-- [Слайды](https://github.com/PhotogrammetryCourse/PhotogrammetryTasks2023/blob/master/slides)
-- [Видео записи лекций](https://www.youtube.com/watch?v=xXrWsCd580g&list=PL5p-5hHpsHBqFm3CQk6jT0amZjW0_2NMU&index=1)
+0. Установить Eigen (если не установили в прошлом задании) и  Ceres Solver - см. инструкции в CMakeLists.txt
+1. Выполнить задания ниже
+2. Отправить **Pull-request** с названием```Task04 <Имя> <Фамилия> <Аффиляция>```:
+
+ - Скопируйте в описание [шаблон](https://raw.githubusercontent.com/PhotogrammetryCourse/PhotogrammetryTasks2023/task04/.github/pull_request_template.md)
+ - Обязательно отправляйте PR из вашей ветки **task04** (вашего форка) в ветку **task04** (основного репозитория)
+ - Перечислите свои мысли по вопросам поднятым в коде и просто появившиеся в процессе выполнения задания
+ - Создайте PR
+ - Затем дождавшись отработку Travis CI (около 15 минут) - скопируйте в описание PR вывод исполнения вашей программы **на CI** (через редактирование описания PR или комментарием, главное используйте пожалуйста спойлер для компактности)
+
+**Мягкий дедлайн**: лекция 28 марта.
+
+**Жесткий дедлайн**: вечер 5 апреля.
+
+Задание 4.1.
+=========
+
+Потренируйтесь в использовании Ceres Solver - выполните все TODO в tests/test_ceres_solver.cpp
+
+Задание 4.2.
+=========
+
+Добавьте учет радиальных дисторсий в src/phg/core/calibration.cpp
+
+Задание 4.3.
+=========
+
+Выполните все TODO в tests/test_sfm_ba.cpp
+
+В MeshLab можно не только смотреть на отдельные облака точек, но и сравнивать несколько:
+
+1) Запустите MeshLab
+2) Выделите несколько .ply файлов и drag&drop-ните их на MeshLab
+3) Затем нажмите на иконку Align - A в кружке (справа нажимая на глазики можно скрыть или показать конкретное облако, и нажав галку показать цвета вершин или ложные цвета):
+
+![MeshLab](/.github/screens/meshlab.png?raw=true)
+
+P.S. если у вас случается ошибка ```unknown file: error: SEH exception with code 0xc0000005 thrown in the test body.``` - вероятнее всего это обычный segfault (например выход за пределы массива), но почему то связка CLion + MSVC/Win это не обрабатывают корректно и не дают возможности увидеть строчку падения даже под отладчиком. Рекомендуется использовать Linux.
+
+Задание 4.4.
+=========
+
+Приложите скриншоты своих лучших результатов. Хотя бы по saharov и herzjesu. Примеры:
+
+![saharov32](/.github/screens/saharov32.png?raw=true)
+
+![herzjesu25](/.github/screens/herzjesu25.png?raw=true)
