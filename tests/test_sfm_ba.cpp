@@ -20,16 +20,17 @@
 
 #include <ceres/rotation.h>
 #include <ceres/ceres.h>
+#include <stdexcept>
 
 // TODO включите Bundle Adjustment (но из любопытства посмотрите как ведет себя реконструкция без BA например для saharov32 без BA)
-#define ENABLE_BA                             0
+#define ENABLE_BA                             1
 
 // TODO когда заработает при малом количестве фотографий - увеличьте это ограничение до 100 чтобы попробовать обработать все фотографии (если же успешно будут отрабаывать только N фотографий - отправьте PR выставив здесь это N)
-#define NIMGS_LIMIT                           10 // сколько фотографий обрабатывать (можно выставить меньше чтобы ускорить экспериментирование, или в случае если весь датасет не выравнивается)
+#define NIMGS_LIMIT                          32 // сколько фотографий обрабатывать (можно выставить меньше чтобы ускорить экспериментирование, или в случае если весь датасет не выравнивается)
 #define INTRINSICS_CALIBRATION_MIN_IMGS       5 // начиная со скольки камер начинать оптимизировать внутренние параметры камеры (фокальную длину и т.п.) - из соображений что "пока камер мало - наблюдений может быть недостаточно чтобы не сойтись к ложной внутренней модели камеры"
 
 #define ENABLE_INSTRINSICS_K1_K2              1 // TODO учитывать ли радиальную дисторсию - коэффициенты k1, k2 попробуйте с ним и и без saharov32, заметна ли разница?
-#define INTRINSIC_K1_K2_MIN_IMGS              7 // начиная со скольки камер начинать оптимизировать k1, k2
+#define INTRINSIC_K1_K2_MIN_IMGS              100 //7 // начиная со скольки камер начинать оптимизировать k1, k2
 
 // TODO попробуйте повыключать эти фильтрации выбросов, насколько изменился результат?
 #define ENABLE_OUTLIERS_FILTRATION_3_SIGMA    1
@@ -390,10 +391,36 @@ public:
         // подробнее см. https://en.wikipedia.org/wiki/Axis%E2%80%93angle_representation
         // (P.S. у камеры всмысле вращения три степени свободы)
 
+        const T* translation = camera_extrinsics + 0;
+        const T* rotation_angle_axis = camera_extrinsics + 3;
+
+        T Rt[9];
+        ceres::AngleAxisToRotationMatrix(rotation_angle_axis, Rt);
+        //R = Rt.t();
+
+        T point[3];
+        for (int i = 0; i < 3; i++) {
+            point[i] = T(0); //translation[i];
+            for (int j = 0; j < 3; j++)
+                point[i] += Rt[j*3+i] * (point_global[j] - translation[j]);
+        }
+
         // Проецируем точку на фокальную плоскость матрицы (т.е. плоскость Z=фокальная длина)
+        point[0] /= point[2];
+        point[1] /= point[2];
+
+        T k1 = camera_intrinsics[0];
+        T k2 = camera_intrinsics[1];
+        T f = camera_intrinsics[2];
+        T cx = camera_intrinsics[3];
+        T cy = camera_intrinsics[4];
 
 #if ENABLE_INSTRINSICS_K1_K2
         // k1, k2 - коэффициенты радиального искажения (radial distortion)
+        T r = point[0]*point[0] + point[1]*point[1];
+        point[0] += k1 * r + k2 * r * r;
+        point[1] += k1 * r + k2 * r * r;
+
 #endif
 
         // Домножаем на f, тем самым переводя в пиксели
@@ -402,8 +429,14 @@ public:
         // Переходим в координаты когда точка (0, 0) - левый верхний угол картинки
         // cx, cy - координаты центра оптической оси (обычно это центр картинки, но часто он чуть смещен)
 
+        point[0] *= f;
+        point[1] *= f;
+        point[0] += cx;
+        point[1] += cy;
         // Теперь по спроецированным координатам не забудьте посчитать невязку репроекции
 
+        residuals[0] = point[0] - observed_x;
+        residuals[1] = point[1] - observed_y;
         return true;
         // TODO сверьте эту функцию с вашей реализацией проекции в src/phg/core/calibration.cpp (они должны совпадать)
     }
@@ -437,6 +470,11 @@ void runBA(std::vector<vector3d> &tie_points,
     // внутренние калибровочные параметры камеры: [5] = {k1, k2, f, cx, cy}
     // TODO: преобразуйте calib в блок параметров камеры (ее внутренних характеристик) для оптимизации в BA
     double camera_intrinsics[5];
+    camera_intrinsics[0] = calib.k1_;
+    camera_intrinsics[1] = calib.k2_;
+    camera_intrinsics[2] = calib.f_;
+    camera_intrinsics[3] = calib.cx_ + calib.width_ * 0.5;
+    camera_intrinsics[4] = calib.cy_ + calib.height_ * 0.5;
     std::cout << "Before BA ";
     printCamera(camera_intrinsics);
 
@@ -465,6 +503,12 @@ void runBA(std::vector<vector3d> &tie_points,
         for (int d = 0; d < 3; ++d) {
             translation[d] = O[d];
         }
+
+        std::cout << "Camera #" << camera_id << "\n";
+        for (int i = 0; i < 6; i++) {
+            std::cout << camera_extrinsics[i] << " ";
+        }
+        std::cout << "\n\n";
     }
 
     // остались только блоки параметров для 3D точек, но их аллоцировать не обязательно, т.к. мы можем их оптимизировать напрямую в tie_points массиве
@@ -577,6 +621,11 @@ void runBA(std::vector<vector3d> &tie_points,
     printCamera(camera_intrinsics);
     // TODO преобразуйте параметры камеры в обратную сторону, чтобы последующая резекция учла актуальное представление о пространстве:
     // calib.* = camera_intrinsics[*];
+    calib.k1_ = camera_intrinsics[0];
+    calib.k2_ = camera_intrinsics[1];
+    calib.f_ = camera_intrinsics[2];
+    calib.cx_ = camera_intrinsics[3] - 0.5 * calib.width_;
+    calib.cy_ = camera_intrinsics[4] - 0.5 * calib.height_;
 
     ASSERT_NEAR(calib.f_ , DATASET_F, 0.2 * DATASET_F);
     ASSERT_NEAR(calib.cx_, 0.0, 0.3 * calib.width());
@@ -651,6 +700,26 @@ void runBA(std::vector<vector3d> &tie_points,
             if (ENABLE_OUTLIERS_FILTRATION_COLINEAR && ENABLE_BA) {
                 // TODO выполните проверку случая когда два луча почти параллельны, чтобы не было странных точек улетающих на бесконечность (например чтобы угол был хотя бы 2.5 градуса)
                 // should_be_disabled = true;
+                /*
+                bool flag = false;
+                for (size_t cj = 0; cj < track.img_kpt_pairs.size(); ++cj) {
+                    if (ci == cj) continue;
+
+                    matrix3d R2; vector3d camera_origin2;
+                    phg::decomposeUndistortedPMatrix(R2, camera_origin2,
+                            cameras[track.img_kpt_pairs[cj].first]);
+
+                    vector3d ray1 = camera_origin - track_point;
+                    vector3d ray2 = camera_origin2 - track_point;
+                    float min_angle = 0.04; // 2.5 градуса ~= 2.5 / 60 ~= 0.04
+                    // sin(min_angle) ~= min_angle
+                    if (cv::norm(ray1.cross(ray2)) > min_angle *cv::norm(ray1) * cv::norm(ray2)) {
+                        flag = true;
+                        break;
+                    }
+                }
+
+                should_be_disabled &= flag; */
             }
 
             {
